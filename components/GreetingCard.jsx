@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import { copyToClipboard, getSocialShareLinks } from "../lib/shareHelper";
 
 const particles = Array.from({ length: 24 }, (_, i) => ({
   left: `${(i * 37 + 7) % 100}%`,
@@ -15,10 +16,13 @@ export default function GreetingCard({
   sender,
   message,
   shareUrl = "",
+  onShare = null,
 }) {
   const cardRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const links = getSocialShareLinks(shareUrl, recipient, sender);
 
   async function downloadCard() {
     if (!cardRef.current || downloading) return;
@@ -45,35 +49,31 @@ export default function GreetingCard({
 
   async function copyLink() {
     if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    const ok = await copyToClipboard(shareUrl);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
-    } catch {
-      window.prompt("ဒီလင့်ခ်ကို ကူးယူပါ", shareUrl);
     }
   }
 
   async function shareLink() {
+    if (onShare) {
+      onShare();
+      return;
+    }
     if (!shareUrl) return;
-    if (navigator.share) {
+    if (typeof navigator !== "undefined" && navigator.share) {
       try {
-        await navigator.share({
-          title: "သီတင်းကျွတ် မေတ္တာကန်တော့ကတ်",
-          text: `${recipient || "မိဘများ"} သို့ ${sender || "သား/သမီး"} မှ ရိုသေစွာ ပို့သသော သီတင်းကျွတ် ကန်တော့လွှာလေးပါ။`,
-          url: shareUrl,
-        });
+        await navigator.share(links.native);
       } catch (err) {
-        // User cancelled or share dismissed
+        if (err.name !== "AbortError") {
+          await copyLink();
+        }
       }
     } else {
       await copyLink();
     }
   }
-
-  const shareText = encodeURIComponent(
-    `${recipient || "မိဘများ"} သို့ ${sender || "သား/သမီး"} မှ ပို့သသော သီတင်းကျွတ် ကန်တော့လွှာလေးပါ။\n${shareUrl}`
-  );
 
   return (
     <div className="card-wrap">
@@ -201,7 +201,7 @@ export default function GreetingCard({
         <div className="social-share-strip">
           <span className="share-strip-label">တိုက်ရိုက် ပို့မည်:</span>
           <a
-            href={`viber://forward?text=${shareText}`}
+            href={links.viber}
             target="_blank"
             rel="noopener noreferrer"
             className="social-share-pill viber"
@@ -210,11 +210,7 @@ export default function GreetingCard({
             Viber
           </a>
           <a
-            href={`https://t.me/share/url?url=${encodeURIComponent(
-              shareUrl
-            )}&text=${encodeURIComponent(
-              `${recipient || "မိဘများ"} သို့ သီတင်းကျွတ် ကန်တော့လွှာ`
-            )}`}
+            href={links.telegram}
             target="_blank"
             rel="noopener noreferrer"
             className="social-share-pill telegram"
@@ -223,13 +219,20 @@ export default function GreetingCard({
             Telegram
           </a>
           <a
-            href={`https://api.whatsapp.com/send?text=${shareText}`}
+            href={links.whatsapp}
             target="_blank"
             rel="noopener noreferrer"
             className="social-share-pill whatsapp"
             title="WhatsApp ဖြင့် ပို့မည်"
           >
             WhatsApp
+          </a>
+          <a
+            href={links.sms}
+            className="social-share-pill sms"
+            title="SMS စာတိုဖြင့် ပို့မည်"
+          >
+            SMS
           </a>
         </div>
       )}

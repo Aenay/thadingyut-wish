@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { encodeCardPayload } from "../lib/shareHelper";
 import PayingRespectCeremony from "../components/PayingRespectCeremony";
+import ShareModal from "../components/ShareModal";
 
 const defaultWishTemplates = [
   {
@@ -36,6 +38,13 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previewMode, setPreviewMode] = useState("card"); // "card" or "ceremony"
+  const [shareModalState, setShareModalState] = useState({
+    isOpen: false,
+    shareUrl: "",
+    recipient: "",
+    sender: "",
+    targetPath: "",
+  });
 
   async function createWish(event) {
     event.preventDefault();
@@ -75,7 +84,7 @@ export default function HomePage() {
           createdId = data.id;
         } else if (insertError) {
           console.warn(
-            "Supabase insert notice (fallback to share URL):",
+            "Supabase insert notice (fallback to compact share URL):",
             insertError.message
           );
         }
@@ -86,17 +95,40 @@ export default function HomePage() {
 
     setBusy(false);
 
+    let targetPath = "";
     if (createdId) {
-      router.push(`/w/${createdId}`);
+      targetPath = `/w/${createdId}`;
     } else {
-      // Robust instant fallback: encodes into share link directly so it ALWAYS works
-      const params = new URLSearchParams({
-        r: recipient.trim(),
-        s: sender.trim(),
-        m: wish.trim(),
+      // Robust cross-platform fallback: encodes into compact URL safe base64
+      const compactCode = encodeCardPayload({
+        recipient: recipient.trim(),
+        sender: sender.trim(),
+        message: wish.trim(),
       });
-      router.push(`/w/share?${params.toString()}`);
+
+      if (compactCode) {
+        targetPath = `/w/share?c=${compactCode}`;
+      } else {
+        const params = new URLSearchParams({
+          r: recipient.trim(),
+          s: sender.trim(),
+          m: wish.trim(),
+        });
+        targetPath = `/w/share?${params.toString()}`;
+      }
     }
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const fullShareUrl = `${origin}${targetPath}`;
+
+    // Display celebratory share modal immediately so user can send link to parents
+    setShareModalState({
+      isOpen: true,
+      shareUrl: fullShareUrl,
+      recipient: recipient.trim(),
+      sender: sender.trim(),
+      targetPath,
+    });
   }
 
   return (
@@ -271,6 +303,20 @@ export default function HomePage() {
         <span className="footer-lamp">🪔</span>
         <p>သီတင်းကျွတ် အခါသမယတွင် မိဘဘိုးဘွားများ အားလုံး စိတ်ချမ်းသာ ကိုယ်ကျန်းမာပါစေ။</p>
       </footer>
+
+      {/* Share Modal Dialog shown after card creation */}
+      <ShareModal
+        isOpen={shareModalState.isOpen}
+        onClose={() => setShareModalState((prev) => ({ ...prev, isOpen: false }))}
+        shareUrl={shareModalState.shareUrl}
+        recipient={shareModalState.recipient}
+        sender={shareModalState.sender}
+        onPreviewCard={() => {
+          if (shareModalState.targetPath) {
+            router.push(shareModalState.targetPath);
+          }
+        }}
+      />
     </main>
   );
 }

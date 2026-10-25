@@ -4,9 +4,11 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { decodeCardPayload } from "../../../lib/shareHelper";
 import PayingRespectCeremony from "../../../components/PayingRespectCeremony";
+import ShareModal from "../../../components/ShareModal";
 
-function WishContent() {
+function WishContent({ onOpenShareModal }) {
   const params = useParams();
   const searchParams = useSearchParams();
   const id = params?.id;
@@ -19,7 +21,24 @@ function WishContent() {
     let active = true;
 
     async function loadWish() {
-      // 1. Check if recipient & sender are passed via search params (URL share fallback)
+      // 1. Check compact cross-browser URL parameter ?c=
+      const compactCode = searchParams.get("c");
+      if (compactCode) {
+        const decoded = decodeCardPayload(compactCode);
+        if (decoded) {
+          if (!active) return;
+          setWish({
+            id: id || "share",
+            recipient: decoded.recipient,
+            sender: decoded.sender,
+            message: decoded.message,
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Check query params fallback ?r= & ?s= & ?m=
       const paramRecipient = searchParams.get("r");
       const paramSender = searchParams.get("s");
       const paramMessage = searchParams.get("m");
@@ -36,8 +55,8 @@ function WishContent() {
         return;
       }
 
-      // 2. Otherwise load from Supabase database by ID
-      if (!supabase || !id) {
+      // 3. Otherwise load from Supabase database by ID
+      if (!supabase || !id || id === "share") {
         if (!active) return;
         setError("ဒီကတ်လေးကို ရှာမတွေ့ပါ။ လင့်ခ်မှန်မမှန် ပြန်လည်စစ်ဆေးပေးပါ။");
         setLoading(false);
@@ -126,6 +145,7 @@ function WishContent() {
         message={wish.message}
         shareUrl={shareUrl}
         initialOpened={false}
+        onShare={onOpenShareModal ? () => onOpenShareModal(wish) : null}
       />
 
       <div className="public-footer-action">
@@ -140,6 +160,23 @@ function WishContent() {
 }
 
 export default function PublicWishPage() {
+  const [shareModalState, setShareModalState] = useState({
+    isOpen: false,
+    shareUrl: "",
+    recipient: "",
+    sender: "",
+  });
+
+  const handleOpenShare = (wishData) => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    setShareModalState({
+      isOpen: true,
+      shareUrl: url,
+      recipient: wishData?.recipient || "မိဘများ",
+      sender: wishData?.sender || "သား/သမီး",
+    });
+  };
+
   return (
     <main className="public-page">
       <div className="ambient ambient-one" aria-hidden="true" />
@@ -151,9 +188,20 @@ export default function PublicWishPage() {
           <span className="brand-mark">✺</span>
           <span>သီတင်းကျွတ် မေတ္တာကတ်</span>
         </Link>
-        <Link className="back-link" href="/">
-          <span>✦ ကတ်အသစ် ဖန်တီးရန်</span>
-        </Link>
+        <div className="public-topbar-actions">
+          <button
+            type="button"
+            className="topbar-share-btn"
+            onClick={() => handleOpenShare()}
+            title="ကတ်လင့်ခ် မျှဝေမည်"
+          >
+            <span>🔗</span>
+            <span>လင့်ခ် မျှဝေမည်</span>
+          </button>
+          <Link className="back-link" href="/">
+            <span>✦ ကတ်အသစ် ဖန်တီးရန်</span>
+          </Link>
+        </div>
       </header>
 
       <Suspense
@@ -164,7 +212,7 @@ export default function PublicWishPage() {
           </div>
         }
       >
-        <WishContent />
+        <WishContent onOpenShareModal={handleOpenShare} />
       </Suspense>
 
       <footer className="footer">
@@ -174,6 +222,15 @@ export default function PublicWishPage() {
           ကိုယ်ကျန်းမာစွာဖြင့် အသက်ရာကျော် ရှည်ပါစေ။
         </p>
       </footer>
+
+      {/* Share Modal Dialog */}
+      <ShareModal
+        isOpen={shareModalState.isOpen}
+        onClose={() => setShareModalState((prev) => ({ ...prev, isOpen: false }))}
+        shareUrl={shareModalState.shareUrl}
+        recipient={shareModalState.recipient}
+        sender={shareModalState.sender}
+      />
     </main>
   );
 }

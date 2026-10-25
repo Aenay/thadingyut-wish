@@ -40,6 +40,7 @@ export default function PayingRespectCeremony({
   message,
   shareUrl = "",
   initialOpened = false,
+  onShare = null,
   videoSrc = "/video/gemini_generated_video_7accb807.mp4",
 }) {
   const [opened, setOpened] = useState(initialOpened);
@@ -52,11 +53,15 @@ export default function PayingRespectCeremony({
 
   const videoRef = useRef(null);
 
+  // Directly triggered from user touch/click for iOS AudioContext & video unlock
+  function handleOpenGate() {
+    playCeremonySound();
+    setOpened(true);
+  }
+
   // When opened, trigger video playback and atmosphere effects
   useEffect(() => {
     if (!opened) return;
-
-    playCeremonySound();
 
     // Generate floating sky lanterns
     const newLanterns = Array.from({ length: 12 }, (_, i) => ({
@@ -68,7 +73,7 @@ export default function PayingRespectCeremony({
     }));
     setLanterns(newLanterns);
 
-    // Auto-play the paying respect animation video
+    // Auto-play the paying respect animation video (iOS & Android safe)
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       const playPromise = videoRef.current.play();
@@ -78,7 +83,7 @@ export default function PayingRespectCeremony({
             setIsPlaying(true);
           })
           .catch(() => {
-            // If browser blocks unmuted autoplay, mute and play
+            // If mobile browser blocks unmuted autoplay, mute and start
             if (videoRef.current) {
               videoRef.current.muted = true;
               setIsMuted(true);
@@ -211,13 +216,24 @@ export default function PayingRespectCeremony({
             <button
               type="button"
               className="gate-open-button"
-              onClick={() => setOpened(true)}
+              onClick={handleOpenGate}
               autoFocus
             >
               <span className="button-icon">🪔</span>
               <span className="button-text">ကန်တော့လွှာ ဖွင့်ကြည့်ရန် နှိပ်ပါ</span>
               <span className="button-sparkle">✦</span>
             </button>
+
+            {onShare && (
+              <button
+                type="button"
+                className="gate-share-link-btn"
+                onClick={onShare}
+              >
+                <span>🔗</span>
+                <span>မိဘများထံ ပို့မည့် လင့်ခ်ယူမည် / မျှဝေမည်</span>
+              </button>
+            )}
 
             <p className="gate-hint">နှိပ်လိုက်ပါက ဆီမီးရောင်စဉ်၊ ကန်တော့ခြင်း ရုပ်ရှင်ဗီဒီယိုနှင့် ဆုတောင်းစာကို မြင်တွေ့ရပါမည်</p>
           </div>
@@ -233,18 +249,34 @@ export default function PayingRespectCeremony({
               <span>🪔</span>
             </div>
 
-            <div className="homage-video-wrapper">
+            <div className="homage-video-wrapper" onClick={togglePlay} title="ဗီဒီယို ရပ်ရန် / ဖွင့်ရန် နှိပ်ပါ">
               <video
                 ref={videoRef}
                 src={videoSrc}
                 autoPlay
                 playsInline
+                webkit-playsinline="true"
                 loop
+                muted={isMuted}
+                preload="auto"
                 className="homage-video"
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
               />
               <div className="video-overlay-glow" aria-hidden="true" />
+
+              {/* Floating Mute/Unmute Pill on Video */}
+              <button
+                type="button"
+                className="video-sound-pill"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMute();
+                }}
+                title={isMuted ? "အသံဖွင့်မည်" : "အသံပိတ်မည်"}
+              >
+                <span>{isMuted ? "🔇 အသံဖွင့်ရန် နှိပ်ပါ" : "🔊 အသံဖွင့်ထားသည်"}</span>
+              </button>
             </div>
 
             <div className="video-caption-bar">
@@ -288,6 +320,7 @@ export default function PayingRespectCeremony({
             sender={sender}
             message={message}
             shareUrl={shareUrl}
+            onShare={onShare}
           />
 
           {/* Parents' Blessing Interaction Section */}
